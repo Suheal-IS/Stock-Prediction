@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, accuracy_score, precision_score, recall_score, f1_score, fbeta_score
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras import Sequential
@@ -10,13 +10,13 @@ from tensorflow.keras.models import load_model
 from sklearn.preprocessing import MinMaxScaler
 from pickle import dump, load
 
-
+# Disable TF v2 behavior if TF v1
 if tf.__version__.startswith("1."):
     import tensorflow.compat.v1 as tf
     tf.disable_v2_behavior()
 
 # Load your datasets
-stock_name = 'AMZN'
+stock_name = 'MSFT'
 df = pd.read_csv('Dataset/stock_tweets.csv')
 df = df[df['Stock Name'] == stock_name]
 df['Date'] = pd.to_datetime(df['Date']).dt.date
@@ -39,7 +39,7 @@ final_df = stock_data.merge(df, on='Date', how='left').fillna(0)
 # Normalize Data
 scaler = MinMaxScaler(feature_range=(-1, 1))
 scaled_data = scaler.fit_transform(final_df.drop(columns=['Date', 'Stock Name']))
-dump(scaler, open('scaler.pkl', 'wb'))  # Save scaler for future use
+dump(scaler, open('newscaler.pkl', 'wb'))  # Save scaler
 
 # Train/Test Split
 train_size = int(len(scaled_data) * 0.8)
@@ -74,7 +74,7 @@ model = build_lstm_model((X_train.shape[1], X_train.shape[2]))
 history = model.fit(X_train, y_train, epochs=100, batch_size=16, validation_data=(X_test, y_test), verbose=1)
 
 # Save the trained model
-model.save('stock_lstm_model.h5')
+model.save('newstock_lstm_model.h5')
 
 # Predictions
 y_pred = model.predict(X_test)
@@ -93,16 +93,17 @@ plt.title(f'{stock_name} Stock Price Prediction')
 plt.legend()
 plt.show()
 
-# Model Evaluation
+# Model Evaluation - Regression
 rmse = np.sqrt(mean_squared_error(y_test_rescaled, y_pred_rescaled))
 mae = mean_absolute_error(y_test_rescaled, y_pred_rescaled)
 r2 = r2_score(y_test_rescaled, y_pred_rescaled)
 
+print(f"\nRegression Metrics:")
 print(f"RMSE: {rmse:.2f}")
 print(f"MAE: {mae:.2f}")
 print(f"R-Squared: {r2:.4f}")
 
-# Model accuracy: Directional Accuracy (percentage of correct "up"/"down" predictions)
+# Directional Accuracy
 def directional_accuracy(y_true, y_pred):
     correct = np.sum((y_true[:-1] - y_true[1:]) * (y_pred[:-1] - y_pred[1:]) > 0)
     total = len(y_true) - 1
@@ -110,3 +111,23 @@ def directional_accuracy(y_true, y_pred):
 
 directional_acc = directional_accuracy(y_test_rescaled, y_pred_rescaled)
 print(f"Directional Accuracy: {directional_acc:.2f}%")
+
+# Classification Metrics (based on direction of price movement)
+def get_direction(series):
+    return np.where(np.diff(series, prepend=series[0]) > 0, 1, 0)
+
+y_true_direction = get_direction(y_test_rescaled)
+y_pred_direction = get_direction(y_pred_rescaled)
+
+accuracy = accuracy_score(y_true_direction, y_pred_direction)
+precision = precision_score(y_true_direction, y_pred_direction, zero_division=0)
+recall = recall_score(y_true_direction, y_pred_direction, zero_division=0)
+f1 = f1_score(y_true_direction, y_pred_direction, zero_division=0)
+f_beta = fbeta_score(y_true_direction, y_pred_direction, beta=0.5, zero_division=0)
+
+print(f"\nClassification Metrics (Based on Price Direction):")
+print(f"Accuracy:  {accuracy:.2f}")
+print(f"Precision: {precision:.2f}")
+print(f"Recall:    {recall:.2f}")
+print(f"F1 Score:  {f1:.2f}")
+print(f"F-beta Score (β=0.5): {f_beta:.2f}")
