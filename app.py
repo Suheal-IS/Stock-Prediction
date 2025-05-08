@@ -15,12 +15,12 @@ from flask import Flask, jsonify, render_template, request, send_file, redirect,
 
 import sqlite3 as sql
 
-
-
-
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
 
+
+import nltk
+nltk.download('vader_lexicon')
 
 @app.route('/')
 def index():
@@ -132,7 +132,11 @@ def get_users():
 
 @app.route('/adminuserslist')
 def admin_users_list():
-    users = get_users()
+    conn = sql.connect('data.db')
+    c = conn.cursor()
+    c.execute("SELECT id, username, email, mobile FROM users")
+    users = c.fetchall()
+    conn.close()
     return render_template('AdminUsersList.html', users=users)
 
 
